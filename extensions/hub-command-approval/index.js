@@ -24,7 +24,7 @@
  *
  * Plain ESM, no build step.
  */
-const STATE_EVENT = 'prts-command-approval/state';
+const STATE_EVENT = 'hub-command-approval/state';
 
 /** Whether this session is asking, from its log. Absent -> the mounted default. */
 function askingFor(session) {
@@ -36,7 +36,7 @@ function askingFor(session) {
   return true; // mounting the row is the opt-in
 }
 
-export default function prtsCommandApproval(ctx) {
+export default function hubCommandApproval(ctx) {
   ctx.on('tools/pre-execute', async (exec, next) => {
     // The exec carries its caller agent; the switch is that agent's session
     // state, so two sessions of the same preset do not share one flip.

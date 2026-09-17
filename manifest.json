@@ -15,7 +15,7 @@
   },
   "extensions": [
     "dsh-presets",
-    "prts-command-approval"
+    "hub-command-approval"
   ],
   "capabilities": [
     "models",

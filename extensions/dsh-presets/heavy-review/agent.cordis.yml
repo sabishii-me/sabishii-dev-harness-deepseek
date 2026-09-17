@@ -255,5 +255,5 @@
 # before it runs. Mounting this row IS the opt-in — a dsh preset is its
 # composition, so a session that selects this preset asks, and one that selects
 # any other preset does not. Plain ESM, no build step.
-- id: prts-command-approval
-  name: 'prts-command-approval'
+- id: hub-command-approval
+  name: 'hub-command-approval'

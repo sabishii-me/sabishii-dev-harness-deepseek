@@ -1,6 +1,6 @@
 # sabishii-me-harness-deepseek — the DeepSeek Harness (`dsh`) plugin
 
-The adapter spawns `dsh web --no-open --port 0` (the port is parsed from the server's stdout banner) and talks to it over loopback only: unary JSON-RPC (`POST /api/<method>`) plus one downlink WebSocket (`/api/events.mux`) carrying the harness's own session event stream — text and reasoning deltas, tool calls and results, approvals, questions, and real cross-process resume. Nothing in the harness is patched. Only the adapter that STARTED a home's server sweeps stale `prts-*` provider routes from it, so an attached adapter cannot delete a route a running session injected.
+The adapter spawns `dsh web --no-open --port 0` (the port is parsed from the server's stdout banner) and talks to it over loopback only: unary JSON-RPC (`POST /api/<method>`) plus one downlink WebSocket (`/api/events.mux`) carrying the harness's own session event stream — text and reasoning deltas, tool calls and results, approvals, questions, and real cross-process resume. Nothing in the harness is patched. Only the adapter that STARTED a home's server sweeps stale `hub-*` (and legacy `prts-*`) provider routes from it, so an attached adapter cannot delete a route a running session injected.
 
 This repository is one harness plugin for
 [`sabishii-me-agent-hub`](https://github.com/sabishii-me/sabishii-me-agent-hub): the
@@ -11,7 +11,7 @@ and (where the harness needs one) the preset definitions it applies. The hub's
 ```
 manifest.json          id, command, runtime pin, extensions, capabilities
 deepseek-adapter.cjs      the adapter (adapter-v1 over stdio)
-extensions/            dsh-presets, prts-command-approval
+extensions/            dsh-presets, hub-command-approval
 ```
 
 * runtime: `@deepseek-ai/dsh@0.1.0-rc.7` → `node runtime/lib/bin.js` (materialised under `runtime/`, not committed)
@@ -21,15 +21,15 @@ extensions/            dsh-presets, prts-command-approval
 ## How the hub uses this directory
 
 The hub never contains harness code. A deployment points it at a plugins directory
-(`PRTS_PLUGINS_DIR`, default `<hub>/plugins`); the hub scans it for directories with a
+(`AGENT_HUB_PLUGINS_DIR`, default `<hub>/plugins`); the hub scans it for directories with a
 `manifest.json`, and this directory *is* the plugin:
 
 | what | who reads it |
 | --- | --- |
 | `manifest.json` | the hub: id, `command`, the runtime pin, the extension ids, and the capabilities this adapter implements |
 | `deepseek-adapter.cjs` | the hub spawns it (`command`) and speaks `adapter-v1` with it |
-| `extensions/<id>/` | the hub copies the ids the manifest declares into that harness's own data dir and hands the adapter the path (`PRTS_INSTALLED_EXTENSIONS_DIR`); the adapter places them where its harness reads extensions |
-| `presets/` | the adapter, which lists them for `presets` and writes the chosen one where its harness-side extension reads it (`PRTS_PRESETS_DIR`) |
+| `extensions/<id>/` | the hub copies the ids the manifest declares into that harness's own data dir and hands the adapter the path (`AGENT_HUB_INSTALLED_EXTENSIONS_DIR`); the adapter places them where its harness reads extensions |
+| `presets/` | the adapter, which lists them for `presets` and writes the chosen one where its harness-side extension reads it (`AGENT_HUB_PRESETS_DIR`) |
 | `runtime/` | the harness itself — an official npm release, **never committed** (`.gitignore`) |
 
 The runtime is materialised from the manifest's pin — by THIS ADAPTER, through its

@@ -15,7 +15,7 @@
 // pinned release) next to this adapter; the manifest names its entry point.
 //
 // Process model: this adapter spawns one dedicated `dsh web` server per bus
-// session, under an ISOLATED DSH_HOME (<PRTS_AGENT_DATA_DIR>/dsh-home). The
+// session, under an ISOLATED DSH_HOME (<AGENT_HUB_HARNESS_DIR>/dsh-home). The
 // home is bootstrapped idempotently on every boot:
 //   - profiles/web/*       minimal profile mounting the dsh-base + web-app
 //                          bundles (no plugins are authored here);
@@ -60,18 +60,18 @@ const os = require('os');
 const path = require('path');
 
 const PLUGIN_DIR = __dirname;
-const DATA_DIR = process.env.PRTS_AGENT_DATA_DIR;
-const CWD = process.env.PRTS_CWD;
+const DATA_DIR = process.env.AGENT_HUB_HARNESS_DIR;
+const CWD = process.env.AGENT_HUB_CWD;
 // Extra roots the caller asked for (ACP calls these additionalDirectories).
 // The core passes them through; whether this harness can use them is decided
 // here, not by the core. We forward them and REPORT what happened rather than
 // dropping them silently.
-const ADDITIONAL_DIRS = JSON.parse(process.env.PRTS_ADDITIONAL_DIRS || '[]');
+const ADDITIONAL_DIRS = JSON.parse(process.env.AGENT_HUB_ADDITIONAL_DIRS || '[]');
 if (!DATA_DIR) {
-  die('PRTS_AGENT_DATA_DIR not set: the core must provide a data dir; refusing to write runtime data next to plugin code');
+  die('AGENT_HUB_HARNESS_DIR not set: the core must provide a data dir; refusing to write runtime data next to plugin code');
 }
 if (!CWD) {
-  die('PRTS_CWD not set: the core must provide the user project cwd');
+  die('AGENT_HUB_CWD not set: the core must provide the user project cwd');
 }
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -87,11 +87,11 @@ function send(o) { process.stdout.write(JSON.stringify(o) + '\n'); }
 // plugin owns its runtime (a deploy closure of the pinned dsh release next to
 // this adapter), so nothing is found on the machine and no checkout path is
 // read: whatever the manifest names is what runs.
-const rawRuntime = process.env.PRTS_RUNTIME_COMMAND;
-if (!rawRuntime) die('the host did not declare a runtime for this plugin (PRTS_RUNTIME_COMMAND missing)');
+const rawRuntime = process.env.AGENT_HUB_RUNTIME_COMMAND;
+if (!rawRuntime) die('the host did not declare a runtime for this plugin (AGENT_HUB_RUNTIME_COMMAND missing)');
 let DSH_RUNTIME;
-try { DSH_RUNTIME = JSON.parse(rawRuntime); } catch { die('PRTS_RUNTIME_COMMAND is not valid JSON'); }
-if (!Array.isArray(DSH_RUNTIME) || !DSH_RUNTIME.length) die('PRTS_RUNTIME_COMMAND must be a non-empty argv array');
+try { DSH_RUNTIME = JSON.parse(rawRuntime); } catch { die('AGENT_HUB_RUNTIME_COMMAND is not valid JSON'); }
+if (!Array.isArray(DSH_RUNTIME) || !DSH_RUNTIME.length) die('AGENT_HUB_RUNTIME_COMMAND must be a non-empty argv array');
 const DSH_BIN = DSH_RUNTIME[DSH_RUNTIME.length - 1];
 if (!fs.existsSync(DSH_BIN)) die(`dsh runtime not found: ${DSH_BIN} (the plugin's runtime is missing)`);
 
@@ -120,7 +120,7 @@ const grants = new Map();
 // file keeps a second session from reading the first's binding and falsely
 // reporting `requires-new-session`.
 const CFG_STATE = path.join(DATA_DIR, 'config-state.json');
-const SID = process.env.PRTS_SESSION_ID || 'default';
+const SID = process.env.AGENT_HUB_SESSION_ID || 'default';
 const cfgStateFile = (() => {
   try { return JSON.parse(fs.readFileSync(CFG_STATE, 'utf8')); } catch { return { addedModels: {} }; }
 })();
@@ -137,20 +137,20 @@ function saveCfgState() { fs.writeFileSync(CFG_STATE, JSON.stringify(cfgStateFil
 // wrote it into this harness's data dir; what a preset must look like inside a
 // dsh home is dsh's own rule, so the placing lives here.
 function installDshPresets() {
-  const installed = process.env.PRTS_INSTALLED_EXTENSIONS_DIR || null;
+  const installed = process.env.AGENT_HUB_INSTALLED_EXTENSIONS_DIR || null;
   const srcRoot = installed ? path.join(installed, 'dsh-presets') : null;
-  const pluginSrc = installed ? path.join(installed, 'prts-command-approval') : null;
+  const pluginSrc = installed ? path.join(installed, 'hub-command-approval') : null;
   if (!srcRoot || !fs.existsSync(srcRoot)) return;
   // The composition names the plugin by package specifier; it must be resolvable
   // from the preset, so place it where the profile's node_modules walk finds it.
   if (pluginSrc && fs.existsSync(pluginSrc)) {
-    const dst = path.join(DSH_HOME, 'profiles', 'node_modules', 'prts-command-approval');
+    const dst = path.join(DSH_HOME, 'profiles', 'node_modules', 'hub-command-approval');
     fs.mkdirSync(dst, { recursive: true });
     for (const f of ['index.js', 'package.json']) {
       if (fs.existsSync(path.join(pluginSrc, f))) fs.copyFileSync(path.join(pluginSrc, f), path.join(dst, f));
     }
     // Also beside the user preset root, for resolution from that location.
-    const dst2 = path.join(DSH_HOME, '.agent-presets', 'node_modules', 'prts-command-approval');
+    const dst2 = path.join(DSH_HOME, '.agent-presets', 'node_modules', 'hub-command-approval');
     fs.mkdirSync(dst2, { recursive: true });
     for (const f of ['index.js', 'package.json']) {
       if (fs.existsSync(path.join(pluginSrc, f))) fs.copyFileSync(path.join(pluginSrc, f), path.join(dst2, f));
@@ -174,7 +174,7 @@ function installDshPresets() {
     fs.mkdirSync(to, { recursive: true });
     for (const f of fs.readdirSync(from)) {
       let body = fs.readFileSync(path.join(from, f), 'utf8');
-      if (pluginEntry && f.endsWith('.yml')) body = body.replace(/name:\s*'prts-command-approval'/g, `name: '${pluginEntry}'`);
+      if (pluginEntry && f.endsWith('.yml')) body = body.replace(/name:\s*'hub-command-approval'/g, `name: '${pluginEntry}'`);
       fs.writeFileSync(path.join(to, f), body);
     }
   }
@@ -245,12 +245,12 @@ let dshOwned = true;    // true = this adapter spawned the dsh (may kill it)
 // Discovery, in order:
 //   1. system scope: the dsh DEFAULT PORT, so a server the USER started is
 //      attached to rather than duplicated.
-//   2. the port this home last published (`.prts-dsh-port`), if it still answers.
+//   2. the port this home last published (`.hub-dsh-port`), if it still answers.
 //   3. otherwise exactly one adapter (the lock holder) starts the server — on the
 //      default port in system scope, on any free port in private — and publishes it.
-const DSH_DEFAULT_PORT = Number(process.env.PRTS_DSH_PORT || 3080);   // kept for the published-port fallback
-function dshLockFile() { return path.join(DSH_HOME, '.prts-dsh-boot.lock'); }
-function dshPortFile() { return path.join(DSH_HOME, '.prts-dsh-port'); }
+const DSH_DEFAULT_PORT = Number(process.env.AGENT_HUB_DSH_PORT || 3080);   // kept for the published-port fallback
+function dshLockFile() { return path.join(DSH_HOME, '.hub-dsh-boot.lock'); }
+function dshPortFile() { return path.join(DSH_HOME, '.hub-dsh-port'); }
 function publishedPort() {
   try { const n = Number(fs.readFileSync(dshPortFile(), 'utf8').trim()); return Number.isInteger(n) && n > 0 ? n : null; } catch { return null; }
 }
@@ -328,7 +328,7 @@ function startServerAsync() {
   })();
 }
 
-function dshLogFile() { return path.join(DSH_HOME, '.prts-dsh-server.log'); }
+function dshLogFile() { return path.join(DSH_HOME, '.hub-dsh-server.log'); }
 
 function reallySpawn(fixedPort) {
   // Skills the hub installed. The hub hands over the directory that HOLDS the skill
@@ -337,7 +337,7 @@ function reallySpawn(fixedPort) {
   // Pointing it there means the harness sees what the hub installed and NOT the
   // user's own ~/.agents/skills (the default keeps that isolation even when no
   // directory was handed over, e.g. a standalone adapter for debugging).
-  const skillsDir = process.env.PRTS_INSTALLED_SKILLS_DIR || null;
+  const skillsDir = process.env.AGENT_HUB_INSTALLED_SKILLS_DIR || null;
   const childEnv = {
     ...process.env, DSH_HOME,
     DSH_AGENTS_HOME: skillsDir ? path.dirname(skillsDir) : path.join(DATA_DIR, 'agents-home'),
@@ -410,7 +410,7 @@ function reallySpawn(fixedPort) {
 function rpc(method, payload, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
     if (!port) return reject(new Error('dsh server has no port yet'));
-    const id = 'prts-' + (++rpcId);
+    const id = 'hub-' + (++rpcId);
     const timer = setTimeout(() => reject(new Error(`dsh rpc ${method} timed out`)), timeoutMs);
     fetch(`http://127.0.0.1:${port}/api/${method}`, {
       method: 'POST',
@@ -804,7 +804,7 @@ function ensureBooted() {
         try {
           const view = await nsView('llm-pi-ai');
           const routes = (view.value && view.value.providers) || {};
-          const stale = Object.keys(routes).filter((id) => id.startsWith('prts-'));
+          const stale = Object.keys(routes).filter((id) => id.startsWith('hub-') || id.startsWith('prts-'));
           for (const id of stale) {
             await settingsWrite(() => rpc('settings.mutate', { ns: 'llm-pi-ai', ops: [{ op: 'unset', path: ['providers', id] }] }));
           }
@@ -1041,14 +1041,14 @@ async function readReviewState() {
     for (let i = events.length - 1; i >= 0; i -= 1) {
       const item = events[i];
       const e = item && item.event ? item.event : item;
-      if (e && e.type === 'prts-command-approval/state') return !!(e.data && e.data.asking === true);
+      if (e && e.type === 'hub-command-approval/state') return !!(e.data && e.data.asking === true);
     }
     return null;
   } catch { return null; }
 }
 
 const entryOf = (piValue, id) => (piValue && piValue.providers && piValue.providers[id]) || null;
-const defaultRef = (id) => 'PRTS_' + String(id).replace(/[^A-Za-z0-9]+/g, '_').toUpperCase() + '_API_KEY';
+const defaultRef = (id) => 'AGENT_HUB_' + String(id).replace(/[^A-Za-z0-9]+/g, '_').toUpperCase() + '_API_KEY';
 const csvIds = (text) => String(text || '').split(',').map((s) => s.trim()).filter(Boolean);
 // llm-pi-ai defaults a model's input modalities to ['text'] when the catalog
 // entry does not declare them — which silently DROPS image parts. the hub-injected
@@ -1342,7 +1342,7 @@ function configPlane(method, id, p) {
       const hubProviders = new Map();
       for (const row of Array.isArray(p.providers) ? p.providers : []) {
         if (!row || typeof row.id !== 'string' || !row.id) continue;
-        const routeId = 'prts-' + String(row.id).replace(/[^A-Za-z0-9_.-]/g, '_');
+        const routeId = 'hub-' + String(row.id).replace(/[^A-Za-z0-9_.-]/g, '_');
         hubProviders.set(routeId, row);
         for (const x of Array.isArray(row.models) ? row.models : []) {
           if (!x || typeof x.id !== 'string' || !x.id) continue;
@@ -1375,11 +1375,11 @@ function configPlane(method, id, p) {
 
     case 'credentials/grant': return ensureBooted().then(async () => {
       // {connectionId, value, url?}. If a url is supplied and no route exists,
-      // this is a hub-managed provider being INJECTED: create a prts-<id>
+      // this is a hub-managed provider being INJECTED: create a hub-<id>
       // route whose apiKeyEnv points at an env var; the value itself only ever
       // rides the dsh child env (grants map), never the file.
       if (p.url) {
-        const routeId = 'prts-' + String(p.connectionId || 'provider').replace(/[^A-Za-z0-9_.-]/g, '_');
+        const routeId = 'hub-' + String(p.connectionId || 'provider').replace(/[^A-Za-z0-9_.-]/g, '_');
         const ref = defaultRef(routeId);
         const ids = await probeModels(p.url, p.value).catch((e) => { throw fail('unknown-provider', `cannot inject provider ${p.url}: ${e.message}`); });
         const pi = await nsView('llm-pi-ai');
@@ -1644,12 +1644,12 @@ case 'config/set': {
           return;
         }
         const connId = cfg.connectionId || (cfgApplied && cfgApplied.connectionId) || 'deepseek-official';
-        // An injected the hub provider becomes the route `prts-<connId>`; accept the
+        // An injected the hub provider becomes the route `hub-<connId>`; accept the
         // bare id as well and resolve it to the injected route when present.
         let routeId = connId;
         try {
           const m0 = await rpc('llm.models', {});
-          const injected = 'prts-' + String(connId).replace(/[^A-Za-z0-9_.-]/g, '_');
+          const injected = 'hub-' + String(connId).replace(/[^A-Za-z0-9_.-]/g, '_');
           if ((m0.groups || []).some((g) => g.id === injected)) routeId = injected;
         } catch { /* fall through: use connId verbatim */ }
         process.stderr.write(`[adapter] config/set connId=${JSON.stringify(connId)} routeId=${JSON.stringify(routeId)}\n`);
@@ -1687,7 +1687,7 @@ case 'config/set': {
           await nativeCall(settingsWrite(() => rpc('settings.mutate', { ns: 'agent-default-model', ops: [{ op: 'unset', path: ['reasoningEffort'] }] })));
         }
         cfgApplied = { connectionId: routeId, model };
-        // Report the REAL route that was applied (prts-<id> for an injected
+        // Report the REAL route that was applied (hub-<id> for an injected
         // provider) — the caller uses it to verify no silent fallback.
         send({ jsonrpc: '2.0', id, result: { applied: { connectionId: routeId, modelProviderId: connId, model, ...(thinkingLevel !== undefined && thinkingLevel !== null ? { thinkingLevel } : {}), ...(appliedPreset !== undefined ? { preset: appliedPreset } : {}), ...(appliedPlan !== undefined && appliedPlan !== null ? { plan: appliedPlan } : {}), ...(appliedReview !== undefined ? { review: appliedReview } : {}), configRevision: cfg.configRevision ?? null }, requires: 'none' } });
       }).catch((e) => sendErr(id, e));

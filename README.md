@@ -32,12 +32,17 @@ The hub never contains harness code. A deployment points it at a plugins directo
 | `presets/` | the adapter, which lists them for `presets` and writes the chosen one where its harness-side extension reads it (`PRTS_PRESETS_DIR`) |
 | `runtime/` | the harness itself — an official npm release, **never committed** (`.gitignore`) |
 
-The runtime is materialised from the manifest's pin — the script installs what the
-manifest declares, so "which version runs" is answered here and nowhere else:
+The runtime is materialised from the manifest's pin — by THIS ADAPTER, through its
+`runtime/prepare` method, so "which version runs" is answered here and nowhere else:
 
 ```
-PRTS_PLUGINS_DIR=<your plugins dir> node <hub>/scripts/prepare-runtimes.mjs deepseek
+POST /v1/hub/plugins/deepseek/prepare        # asks this adapter; answers {ready, package, version, target, detail}
 ```
+
+The hub also asks for it by itself, before the first `session/start`, whenever the
+declared command is not on disk yet — so a freshly installed plugin simply works: the
+session waits for the install instead of failing. The hub installs no harness itself and
+knows no package names.
 
 A hub started against a plugins directory that contains this one lists `deepseek` in
 `GET /v1/harnesses`, and the hub's boot self-check validates this manifest against

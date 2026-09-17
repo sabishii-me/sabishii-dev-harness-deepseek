@@ -1,0 +1,32 @@
+{
+  "id": "deepseek",
+  "protocol": 0,
+  "command": [
+    "node",
+    "deepseek-adapter.cjs"
+  ],
+  "runtime": {
+    "package": "@deepseek-ai/dsh",
+    "version": "0.1.0-rc.7",
+    "command": [
+      "node",
+      "runtime/lib/bin.js"
+    ]
+  },
+  "extensions": [
+    "dsh-presets",
+    "prts-command-approval"
+  ],
+  "capabilities": [
+    "models",
+    "providers",
+    "presets",
+    "plan",
+    "review",
+    "fork",
+    "stats",
+    "compact",
+    "rename",
+    "skills"
+  ]
+}

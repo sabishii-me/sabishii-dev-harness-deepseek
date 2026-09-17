@@ -1,0 +1,7 @@
+{
+  "name": "sabishii-me-harness-deepseek",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The deepseek harness plugin for sabishii-me-agent-hub: adapter, manifest, extensions and presets.",
+  "main": "deepseek-adapter.cjs"
+}

@@ -19,6 +19,7 @@
   ],
   "capabilities": [
     "models",
+    "runtime",
     "providers",
     "presets",
     "plan",

@@ -52,7 +52,7 @@
 //     allowed-once / rejected outcome via POST /api/respond.
 //   - stdin closed → kill the server, exit(0)   (contract: die with the core)
 
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -1880,6 +1880,82 @@ case 'config/set': {
       });
       return;
     }
+    // runtime/prepare: materialise the harness this plugin drives. The manifest pins it
+            // (runtime.package + runtime.version) and this adapter installs exactly that
+            // version into <plugin>/runtime, the directory the manifest's command is relative
+            // to. The hub asks for this and verifies the result; it never installs a harness
+            // itself and knows nothing about packages or release layouts.
+                case 'runtime/prepare': {
+              const mf = path.join(PLUGIN_DIR, 'manifest.json');
+              let manifest = {};
+              try { manifest = JSON.parse(fs.readFileSync(mf, 'utf8')); } catch (e) {
+                send({ jsonrpc: '2.0', id, result: { ready: false, detail: `cannot read ${mf}: ${e.message}` } });
+                return;
+              }
+              const rt = manifest.runtime;
+              if (!rt || !rt.package || !rt.version) {
+                send({ jsonrpc: '2.0', id, result: { ready: true, detail: 'no runtime declared: this adapter brings its own' } });
+                return;
+              }
+              const dir = path.join(PLUGIN_DIR, 'runtime');
+              const rel = Array.isArray(rt.command) ? rt.command.slice(1).find((p) => !String(p).startsWith('-')) : null;
+              const target = rel ? path.resolve(PLUGIN_DIR, rel) : null;
+              if (target && fs.existsSync(target)) {
+                send({ jsonrpc: '2.0', id, result: { ready: true, package: rt.package, version: rt.version, target, detail: 'already present' } });
+                return;
+              }
+              // npm's own output would corrupt the JSON-RPC stream on stdout, so it is echoed
+              // to stderr: the hub keeps the last lines and shows them when something fails.
+              const run = (cmd, args, opts) => {
+                const r = spawnSync(cmd, args, { cwd: dir, windowsHide: true, shell: process.platform === 'win32', encoding: 'utf8', ...opts });
+                if (r.stdout) process.stderr.write(String(r.stdout));
+                if (r.stderr) process.stderr.write(String(r.stderr));
+                return r;
+              };
+              const spec = `${rt.package}@${rt.version}`;
+              fs.mkdirSync(dir, { recursive: true });
+              let done = null;
+              try {
+                if (rt.mode === 'package') {
+                  const pkg = path.join(dir, 'package.json');
+                  if (!fs.existsSync(pkg)) fs.writeFileSync(pkg, JSON.stringify({ name: `agent-hub-runtime-${manifest.id}`, private: true }, null, 2) + String.fromCharCode(10));
+                  const r = run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund', spec]);
+                  if (r.status !== 0) done = `npm install ${spec} exited ${r.status}`;
+                } else {
+                  const packed = run('npm', ['pack', spec]);
+                  if (packed.status !== 0) done = `npm pack ${spec} exited ${packed.status}`;
+                  else {
+                    const tgz = String(packed.stdout || '').trim().split(String.fromCharCode(10)).pop();
+                    const unpack = run('tar', ['xzf', tgz]);
+                    if (unpack.status !== 0) done = `tar xzf ${tgz} exited ${unpack.status}`;
+                    else {
+                      const inner = path.join(dir, 'package');
+                      if (fs.existsSync(inner)) {
+                        for (const entry of fs.readdirSync(inner)) fs.renameSync(path.join(inner, entry), path.join(dir, entry));
+                        fs.rmSync(inner, { recursive: true, force: true });
+                      }
+                      fs.rmSync(path.join(dir, tgz), { force: true });
+                      if (fs.existsSync(path.join(dir, 'package.json'))) {
+                        const r = run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund']);
+                        if (r.status !== 0) done = `npm install (dependencies) exited ${r.status}`;
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                done = e.message;
+              }
+              const ready = !done && (!target || fs.existsSync(target));
+              if (!done && target && !fs.existsSync(target)) done = `the install did not produce ${rel}, which the manifest's command points at`;
+              send({ jsonrpc: '2.0', id, result: {
+                ready,
+                package: rt.package,
+                version: rt.version,
+                target,
+                detail: done || `installed ${spec}`,
+              } });
+              return;
+            }
         default:
       if (configPlane(method, id, params) !== false) return;
       send({ jsonrpc: '2.0', id, error: { code: -32601, message: `unknown plugin method ${method}` } });
